@@ -7,7 +7,7 @@ class ValidarCandidatoController {
     const { email, cpf } = req.body;
     if (!email || !cpf) return res.status(400).json({ error: 'email e cpf são obrigatórios' });
     try {
-      const { token, testeId } = await this.validarCandidatoUseCase.execute(email, cpf);
+      const { token, testeId } = await this.validarCandidatoUseCase.execute(email, cpf); // Por enquanto, sem empresaId
       res.json({ token, testeId });
     } catch (error) {
       res.status(400).json({ error: error.message });

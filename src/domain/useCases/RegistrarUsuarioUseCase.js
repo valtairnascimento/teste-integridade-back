@@ -14,12 +14,11 @@ class RegistrarUsuarioUseCase {
 
     const hashedSenha = bcrypt.hashSync(senha, 10);
     const usuario = {
-      id: uuidv4(),
       email,
       senha: hashedSenha,
       empresaNome,
       role: 'empresa',
-      testesComprados: 0 // Para futuros créditos
+      testesComprados: 0 // Inicialmente sem créditos
     };
 
     return await this.usuarioRepository.save(usuario);

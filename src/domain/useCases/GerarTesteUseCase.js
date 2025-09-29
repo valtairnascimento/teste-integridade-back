@@ -14,17 +14,17 @@ class GerarTesteUseCase {
     const testeId = uuidv4();
     const teste = new Teste(perguntasFixas, perguntasRandomizadas, usuarioId);
 
-    // Valida e associa o candidato
     const empresa = await this.usuarioRepository.findById(usuarioId);
     if (!empresa || empresa.testesComprados <= 0) {
       throw new Error('Créditos insuficientes');
     }
-    await this.usuarioRepository.updateCreditos(usuarioId, -1); // Deduz 1 crédito
+    await this.usuarioRepository.updateCreditos(empresa._id, -1); 
+
     const candidato = await this.candidatoRepository.save({
       nome: nomeCandidato,
       email: emailCandidato,
       cpf: cpfCandidato,
-      empresaId: usuarioId,
+      empresaId: empresa._id, 
       testeId,
     });
 

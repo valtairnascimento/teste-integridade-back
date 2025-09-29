@@ -12,8 +12,8 @@ class AutenticarUsuarioUseCase {
       throw new Error('Credenciais inválidas');
     }
 
-    const token = jwt.sign({ id: usuario.id, role: usuario.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
-    return { token, id: usuario.id }; 
+    const token = jwt.sign({ id: usuario._id, role: usuario.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    return { token, id: usuario._id }; 
   }
 }
 
