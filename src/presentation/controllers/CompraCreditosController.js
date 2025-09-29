@@ -1,8 +1,9 @@
 const Empresa = require('../../infrastructure/models/Empresa');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY');
 
 class CompraCreditosController {
   async comprar(req, res) {
-    const { quantidade } = req.body; // Ex.: { quantidade: 50 }
+    const { quantidade } = req.body;
     const empresaId = req.user.id;
 
     if (!quantidade || quantidade < 10 || !Number.isInteger(quantidade)) {
@@ -14,13 +15,22 @@ class CompraCreditosController {
       return res.status(404).json({ error: 'Empresa não encontrada' });
     }
 
-    // Simulação de pagamento (integre com Stripe/PayPal aqui)
-    // Exemplo: Após confirmação de pagamento
+    const valor = quantidade * 1; // Ex.: R$ 1 por crédito
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: valor * 100, // Em centavos
+      currency: 'brl',
+      description: `Compra de ${quantidade} créditos`,
+      metadata: { empresaId },
+    });
+
+    // Simulação: Aqui você deve confirmar o pagamento via webhook ou frontend
+    // Após confirmação, atualize os créditos
     empresa.creditos += quantidade;
     await empresa.save();
 
     res.json({
       message: `Compra de ${quantidade} créditos realizada com sucesso. Novo saldo: ${empresa.creditos}`,
+      clientSecret: paymentIntent.client_secret,
       saldo: empresa.creditos
     });
   }
