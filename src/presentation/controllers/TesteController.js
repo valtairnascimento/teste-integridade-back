@@ -7,19 +7,22 @@ class TesteController {
   }
 
   async gerarTeste(req, res) {
-    const { usuarioId } = req.body;
-    if (!usuarioId) return res.status(400).json({ error: 'usuarioId é obrigatório' });
-    try {
-      const { testeId, teste } = await this.gerarTesteUseCase.execute(usuarioId);
-      res.json({ testeId, ...teste });
-    } catch (error) {
-      console.error('Erro ao gerar teste:', error);
-      res.status(500).json({ error: 'Erro ao gerar teste', details: error.message });
-    }
+  const { nomeCandidato, emailCandidato, cpfCandidato } = req.body;
+  const usuarioId = req.user.id; 
+  if (!nomeCandidato || !emailCandidato || !cpfCandidato) {
+    return res.status(400).json({ error: 'nomeCandidato, emailCandidato e cpfCandidato são obrigatórios' });
   }
+  try {
+    const { testeId, teste, candidato } = await this.gerarTesteUseCase.execute(usuarioId, nomeCandidato, emailCandidato, cpfCandidato);
+    res.json({ testeId, ...teste, candidato });
+  } catch (error) {
+    console.error('Erro ao gerar teste:', error);
+    res.status(500).json({ error: 'Erro ao gerar teste', details: error.message });
+  }
+}
 
   async calcularComprometimento(req, res) {
-    const { testeId, respostas, perguntas } = req.body; // Adiciona 'perguntas' ao body
+    const { testeId, respostas, perguntas } = req.body;
     if (!testeId || !respostas || !perguntas) return res.status(400).json({ error: 'testeId, respostas e perguntas são obrigatórios' });
     try {
       const resultado = await this.calcularComprometimentoUseCase.execute(testeId, respostas, perguntas);
