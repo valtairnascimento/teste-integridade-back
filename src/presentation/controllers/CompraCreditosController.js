@@ -1,7 +1,14 @@
+const { MercadoPagoConfig, Preference } = require('mercadopago');
 const Empresa = require('../../infrastructure/models/Empresa');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY');
 
 class CompraCreditosController {
+  constructor() {
+    this.client = new MercadoPagoConfig({
+      accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN,
+      options: { timeout: 5000 },
+    });
+  }
+
   async comprar(req, res) {
     const { quantidade } = req.body;
     const empresaId = req.user.id;
@@ -16,23 +23,39 @@ class CompraCreditosController {
     }
 
     const valor = quantidade * 1; // Ex.: R$ 1 por crédito
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: valor * 100, // Em centavos
-      currency: 'brl',
-      description: `Compra de ${quantidade} créditos`,
-      metadata: { empresaId },
-    });
+    const preference = new Preference(this.client);
 
-    // Simulação: Aqui você deve confirmar o pagamento via webhook ou frontend
-    // Após confirmação, atualize os créditos
-    empresa.creditos += quantidade;
-    await empresa.save();
+    try {
+      const body = {
+        items: [
+          {
+            title: `Pacote de ${quantidade} créditos`,
+            quantity: 1,
+            currency_id: 'BRL',
+            unit_price: valor,
+          },
+        ],
+        back_urls: {
+          success: 'https://seu-site.com/sucesso', // Redireciona após pagamento aprovado
+          failure: 'https://seu-site.com/falha',
+          pending: 'https://seu-site.com/pendente',
+        },
+        auto_return: 'approved', // Redireciona automaticamente após aprovação
+        external_reference: `${empresaId}-${quantidade}`, // Para rastrear no webhook
+        metadata: { empresaId },
+      };
 
-    res.json({
-      message: `Compra de ${quantidade} créditos realizada com sucesso. Novo saldo: ${empresa.creditos}`,
-      clientSecret: paymentIntent.client_secret,
-      saldo: empresa.creditos
-    });
+      const preferenceResponse = await preference.create({ body });
+      res.json({
+        message: 'Preference criada com sucesso',
+        init_point: preferenceResponse.init_point, // Link para o checkout do Mercado Pago
+        id: preferenceResponse.id, // ID da preferência para rastrear
+        saldoAtual: empresa.creditos,
+      });
+    } catch (error) {
+      console.error('Erro ao criar preferência Mercado Pago:', error);
+      res.status(500).json({ error: 'Erro ao processar compra', details: error.message });
+    }
   }
 }
 

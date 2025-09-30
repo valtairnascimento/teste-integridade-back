@@ -1,7 +1,7 @@
-const Empresa = require('../infrastructure/models/Empresa');
+const Empresa = require('../../infrastructure/models/Empresa');
 
 const verificarCreditos = async (req, res, next) => {
-  const empresaId = req.user.id; // Definido pelo authMiddleware
+  const empresaId = req.user.id; // Obtido do authMiddleware
   const empresa = await Empresa.findById(empresaId);
 
   if (!empresa) {
@@ -12,10 +12,11 @@ const verificarCreditos = async (req, res, next) => {
     return res.status(402).json({ error: 'Créditos insuficientes. Compre mais créditos.' });
   }
 
+  // Deduz 1 crédito para a ação (ex.: gerar teste)
   empresa.creditos -= 1;
   await empresa.save();
 
-  req.empresa = empresa; 
+  req.empresa = empresa; // Passa para o controller se necessário
   next();
 };
 

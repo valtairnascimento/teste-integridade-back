@@ -19,7 +19,8 @@ const usuarioRoutes = require('./presentation/routes/usuarioRoutes');
 const resultadoRoutes = require('./presentation/routes/resultadoRoutes');
 const comprarCreditosRoutes = require('./presentation/routes/comprarCreditosRoutes');
 const authMiddleware = require('./presentation/middlewares/auth');
-const compraRoutes = require('./routes/compraRoutes')();
+const compraRoutes = require('./presentation/routes/compraRoutes');
+const webhookRoutes = require('./presentation/routes/webhookRoutes');
 
 dotenv.config();
 
@@ -42,14 +43,13 @@ const validarCandidatoUseCase = new ValidarCandidatoUseCase(candidatoRepository)
 const visualizarResultadosUseCase = new VisualizarResultadosUseCase(respostaRepository);
 const comprarCreditosUseCase = new ComprarCreditosUseCase(usuarioRepository);
 
-
 app.use('/api', usuarioRoutes(registrarUsuarioUseCase));
 app.use('/api', testeRoutes(gerarTesteUseCase, calcularComprometimentoUseCase));
 app.use('/api', validarCandidatoRoutes(validarCandidatoUseCase));
 app.use('/api', resultadoRoutes(visualizarResultadosUseCase));
 app.use('/api', comprarCreditosRoutes(comprarCreditosUseCase));
-app.use('/api', compraRoutes);
-app.use('/api', require('./routes/webhookRoutes'));
+app.use('/api', compraRoutes()); // Chame como função, se necessário
+app.use('/api', webhookRoutes()); // Chame como função, se necessário
 
 app.post('/api/login', async (req, res) => {
   const { email, senha } = req.body;

@@ -3,8 +3,9 @@ const CompraCreditosController = require('../controllers/CompraCreditosControlle
 const authMiddleware = require('../middlewares/auth');
 
 const router = express.Router();
+const compraCreditosController = new CompraCreditosController();
 
-module.exports = (compraCreditosController = new CompraCreditosController()) => {
-  router.post('/comprar-creditos', [authMiddleware], compraCreditosController.comprar.bind(compraCreditosController));
+module.exports = () => {
+  router.post('/comprar-creditos', authMiddleware, compraCreditosController.comprar.bind(compraCreditosController));
   return router;
 };
