@@ -1,19 +1,40 @@
 class CandidatoController {
-  constructor(cadastrarCandidatoUseCase) {
-    this.cadastrarCandidatoUseCase = cadastrarCandidatoUseCase;
+  constructor(validarCandidatoUseCase, logger = console) {
+    this.validarCandidatoUseCase = validarCandidatoUseCase;
+    this.logger = logger;
   }
 
-  async cadastrar(req, res) {
-    const { nome, email, cpf, testeId } = req.body;
-    const empresaId = req.user.id; // Do middleware auth
-    if (!nome || !email || !cpf) return res.status(400).json({ error: 'nome, email e cpf são obrigatórios' });
+  async validar(req, res) {
     try {
-      const candidato = await this.cadastrarCandidatoUseCase.execute(empresaId, nome, email, cpf, testeId);
-      res.json({ mensagem: 'Candidato cadastrado com sucesso', candidato });
+      const { email, cpf, empresaId } = req.body;
+
+      this.logger.info('Validando candidato', { email });
+
+      const resultado = await this.validarCandidatoUseCase.execute(
+        email,
+        cpf,
+        empresaId
+      );
+
+      this.logger.info('Candidato validado com sucesso', { 
+        testeId: resultado.testeId 
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Candidato validado com sucesso',
+        data: resultado
+      });
+
     } catch (error) {
-      res.status(400).json({ error: error.message });
+      this.logger.error('Erro ao validar candidato', { 
+        error: error.message 
+      });
+
+      return res.status(400).json({
+        success: false,
+        error: error.message
+      });
     }
   }
 }
-
-module.exports = CandidatoController;

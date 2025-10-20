@@ -2,60 +2,88 @@ const { MercadoPagoConfig, Preference } = require('mercadopago');
 const Empresa = require('../../infrastructure/models/Empresa');
 
 class CompraCreditosController {
-  constructor() {
-    this.client = new MercadoPagoConfig({
-      accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN,
-      options: { timeout: 5000 },
-    });
+  constructor(comprarCreditosUseCase, logger = console) {
+    this.comprarCreditosUseCase = comprarCreditosUseCase;
+    this.logger = logger;
   }
 
   async comprar(req, res) {
+    const startTime = Date.now();
     const { quantidade } = req.body;
     const empresaId = req.user.id;
 
-    if (!quantidade || quantidade < 10 || !Number.isInteger(quantidade)) {
-      return res.status(400).json({ error: 'Quantidade inválida. Mínimo de 10 créditos.' });
-    }
-
-    const empresa = await Empresa.findById(empresaId);
-    if (!empresa) {
-      return res.status(404).json({ error: 'Empresa não encontrada' });
-    }
-
-    const valor = quantidade * 1; // Ex.: R$ 1 por crédito
-    const preference = new Preference(this.client);
+    // Log da requisição
+    this.logger.info('Iniciando compra de créditos', {
+      empresaId,
+      quantidade,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     try {
-      const body = {
-        items: [
-          {
-            title: `Pacote de ${quantidade} créditos`,
-            quantity: 1,
-            currency_id: 'BRL',
-            unit_price: valor,
-          },
-        ],
-        back_urls: {
-          success: 'https://seu-site.com/sucesso', // Redireciona após pagamento aprovado
-          failure: 'https://seu-site.com/falha',
-          pending: 'https://seu-site.com/pendente',
-        },
-        auto_return: 'approved', // Redireciona automaticamente após aprovação
-        external_reference: `${empresaId}-${quantidade}`, // Para rastrear no webhook
-        metadata: { empresaId },
-      };
+      const resultado = await this.comprarCreditosUseCase.execute(empresaId, quantidade);
 
-      const preferenceResponse = await preference.create({ body });
-      res.json({
-        message: 'Preference criada com sucesso',
-        init_point: preferenceResponse.init_point, // Link para o checkout do Mercado Pago
-        id: preferenceResponse.id, // ID da preferência para rastrear
-        saldoAtual: empresa.creditos,
+      this.logger.info('Compra de créditos processada com sucesso', {
+        empresaId,
+        quantidade,
+        preferenciaId: resultado.preferencia.id,
+        duracao: Date.now() - startTime,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Preferência de pagamento criada com sucesso',
+        data: resultado,
       });
     } catch (error) {
-      console.error('Erro ao criar preferência Mercado Pago:', error);
-      res.status(500).json({ error: 'Erro ao processar compra', details: error.message });
+      return this.handleError(error, res, { empresaId, quantidade, duracao: Date.now() - startTime });
     }
+  }
+
+  handleError(error, res, context) {
+    this.logger.error('Erro ao processar compra de créditos', {
+      ...context,
+      error: error.message,
+      stack: error.stack,
+    });
+
+    // Erros de validação
+    if (error.message.includes('Quantidade') || 
+        error.message.includes('número inteiro') ||
+        error.message.includes('mínima') ||
+        error.message.includes('máxima')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validação falhou',
+        message: error.message,
+      });
+    }
+
+    // Empresa não encontrada ou inativa
+    if (error.message.includes('não encontrada') || 
+        error.message.includes('inativa')) {
+      return res.status(404).json({
+        success: false,
+        error: 'Empresa não encontrada ou inativa',
+        message: error.message,
+      });
+    }
+
+    // Erro do Mercado Pago
+    if (error.message.includes('preferência de pagamento')) {
+      return res.status(503).json({
+        success: false,
+        error: 'Serviço de pagamento temporariamente indisponível',
+        message: 'Por favor, tente novamente em alguns instantes',
+      });
+    }
+
+    // Erro genérico
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: 'Não foi possível processar a compra. Tente novamente mais tarde.',
+    });
   }
 }
 
