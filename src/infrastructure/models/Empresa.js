@@ -1,54 +1,62 @@
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-// ============= EMPRESA/USUÁRIO (UNIFICADO) =============
-const empresaSchema = new mongoose.Schema({
-  nome: { 
-    type: String, 
-    required: [true, 'Nome da empresa é obrigatório'],
-    trim: true,
-    minlength: [3, 'Nome deve ter no mínimo 3 caracteres']
-  },
-  email: { 
-    type: String, 
-    required: [true, 'Email é obrigatório'],
+const empresaSchema = new Schema({
+  email: {
+    type: String,
+    required: true,
     unique: true,
     lowercase: true,
     trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Email inválido']
+    match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   },
-  senha: { 
-    type: String, 
-    required: [true, 'Senha é obrigatória'],
-    minlength: [6, 'Senha deve ter no mínimo 6 caracteres']
+  senha: {
+    type: String,
+    required: true,
+    select: false 
+  },
+  nome: {
+    type: String,
+    required: true,
+    trim: true
   },
   cnpj: {
     type: String,
-    sparse: true,
-    match: [/^\d{14}$/, 'CNPJ deve ter 14 dígitos']
+    trim: true,
+    match: /^\d{14}$/
   },
-  telefone: {
-    type: String,
-    trim: true
-  },
-  creditos: { 
-    type: Number, 
+  creditos: {
+    type: Number,
     default: 0,
-    min: [0, 'Créditos não podem ser negativos']
+    min: 0
   },
-  role: { 
-    type: String, 
-    default: 'empresa',
-    enum: ['empresa', 'admin']
+  role: {
+    type: String,
+    enum: ['empresa', 'admin'],
+    default: 'empresa'
   },
   status: {
     type: String,
-    default: 'ativo',
-    enum: ['ativo', 'inativo', 'suspenso']
+    enum: ['ativo', 'inativo', 'suspenso'],
+    default: 'ativo'
+  },
+  configuracoes: {
+    notificacoesCreditosBaixos: {
+      type: Boolean,
+      default: true
+    },
+    limiteAlertaCreditos: {
+      type: Number,
+      default: 50
+    },
+    emailNotificacoes: {
+      type: String
+    }
   },
   historicoCreditos: [{
     tipo: {
       type: String,
-      enum: ['compra', 'uso', 'ajuste', 'reembolso'],
+      enum: ['compra', 'uso', 'estorno', 'bonus'],
       required: true
     },
     quantidade: {
@@ -63,58 +71,169 @@ const empresaSchema = new mongoose.Schema({
       type: Number,
       required: true
     },
-    acao: String, // ex: "/api/gerar-teste"
-    paymentId: String, // ID do pagamento Mercado Pago
+    acao: String,
+    paymentId: String,
     descricao: String,
-    data: {
-      type: Date,
-      default: Date.now
-    },
     metadata: {
       ip: String,
       userAgent: String
-    }
-  }],
-  configuracoes: {
-    notificacoesEmail: {
-      type: Boolean,
-      default: true
     },
+    data: {
+      type: Date,
+      default: Date.now
+    }
+  }]
+}, {
+  timestamps: true
+});
+
+empresaSchema.virtual('creditosBaixos').get(function() {
+  return this.creditos < this.configuracoes.limiteAlertaCreditos;
+});
+
+empresaSchema.methods.adicionarCreditos = function(quantidade, tipo = 'compra') {
+  const saldoAnterior = this.creditos;
+  this.creditos += quantidade;
+  
+  this.historicoCreditos.push({
+    tipo,
+    quantidade,
+    saldoAnterior,
+    saldoAtual: this.creditos,
+    data: new Date()
+  });
+
+  return this.save();
+};
+
+const Empresa = mongoose.model('Empresa', empresaSchema);
+
+const empresaSchemaExtension = {
+  demonstracaoAtivada: {
+    type: Boolean,
+    default: false
+  },
+  dataDemonstracao: {
+    type: Date
+  },
+  plano: {
+    tipo: {
+      type: String,
+      enum: ['free', 'basic', 'pro', 'enterprise'],
+      default: 'free'
+    },
+    dataInicio: Date,
+    dataFim: Date,
+    renovacaoAutomatica: {
+      type: Boolean,
+      default: false
+    }
+  },
+  configuracoes: {
     notificacoesCreditosBaixos: {
       type: Boolean,
       default: true
     },
     limiteAlertaCreditos: {
       type: Number,
-      default: 10
+      default: 50
+    },
+    emailNotificacoes: String,
+    
+    // Notificações
+    notificacoes: {
+      email: {
+        testeConcluido: { type: Boolean, default: true },
+        creditosBaixos: { type: Boolean, default: true },
+        relatorioSemanal: { type: Boolean, default: false },
+        atualizacoesSistema: { type: Boolean, default: true }
+      },
+      push: {
+        habilitado: { type: Boolean, default: false }
+      }
+    },
+    
+    // Integrações
+    integracoes: {
+      apiKey: String,
+      apiKeyAtiva: { type: Boolean, default: false },
+      webhookUrl: String,
+      webhookAtivo: { type: Boolean, default: false },
+      webhookEventos: [String],
+      sso: {
+        habilitado: { type: Boolean, default: false },
+        provider: String,
+        configuracao: Schema.Types.Mixed
+      }
+    },
+    
+    // Retenção de dados
+    retencaoDados: {
+      periodoArmazenamento: {
+        type: Number,
+        default: 24 // meses
+      },
+      deletarAutomaticamente: {
+        type: Boolean,
+        default: false
+      },
+      modoConformidade: {
+        type: Boolean,
+        default: true
+      }
+    },
+    
+    // Personalização
+    personalizacao: {
+      logo: String,
+      corPrimaria: String,
+      mensagemBoasVindas: String,
+      mensagemConclusao: String
+    }
+  },
+  
+  // Usuários da empresa (multi-user)
+  usuarios: [{
+    nome: String,
+    email: String,
+    role: {
+      type: String,
+      enum: ['admin', 'gestor', 'visualizador'],
+      default: 'visualizador'
+    },
+    ativo: {
+      type: Boolean,
+      default: true
+    },
+    ultimoAcesso: Date,
+    criadoEm: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  
+  // Limites por plano
+  limites: {
+    testesSimultaneos: {
+      type: Number,
+      default: 100
+    },
+    usuariosAdicionais: {
+      type: Number,
+      default: 1
+    },
+    retencaoDados: {
+      type: Number,
+      default: 12 // meses
+    },
+    exportacoesIlimitadas: {
+      type: Boolean,
+      default: false
     }
   }
-}, {
-  timestamps: true // Adiciona createdAt e updatedAt automaticamente
-});
-
-// Índices para melhor performance
-empresaSchema.index({ email: 1 });
-empresaSchema.index({ status: 1 });
-empresaSchema.index({ creditos: 1 });
-
-// Método virtual para verificar créditos baixos
-empresaSchema.virtual('creditosBaixos').get(function() {
-  return this.creditos < this.configuracoes.limiteAlertaCreditos;
-});
-
-// Método para adicionar ao histórico
-empresaSchema.methods.adicionarHistorico = function(tipo, quantidade, acao, paymentId = null, metadata = {}) {
-  this.historicoCreditos.push({
-    tipo,
-    quantidade,
-    saldoAnterior: this.creditos,
-    saldoAtual: this.creditos + quantidade,
-    acao,
-    paymentId,
-    metadata,
-    data: new Date()
-  });
 };
 
-const Empresa = mongoose.model('Empresa', empresaSchema);
+module.exports = {
+  Empresa,
+ 
+};
